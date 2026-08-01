@@ -87,18 +87,24 @@
     font-weight: 700;
   }
   #recenterBtn { display: none; }
+  #addPointBtn {
+    width: clamp(64px, 15vmin, 84px) !important;
+    height: clamp(64px, 15vmin, 84px) !important;
+    font-size: clamp(26px, 6vmin, 36px) !important;
+    border-width: 2px !important;
+  }
   #addPointBtnBig {
     position: absolute;
     right: max(16px, env(safe-area-inset-right, 16px));
     bottom: calc(env(safe-area-inset-bottom, 16px) + 50px);
-    width: clamp(64px, 18vmin, 92px);
-    height: clamp(64px, 18vmin, 92px);
+    width: clamp(100px, 26vmin, 150px);
+    height: clamp(100px, 26vmin, 150px);
     border-radius: 50%;
-    border: 2px solid #2b90c9;
+    border: 3px solid #2b90c9;
     background: rgba(13, 52, 80, 0.9);
     color: #eaf6ff;
-    font-size: clamp(28px, 8vmin, 42px);
-    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    font-size: clamp(40px, 11vmin, 60px);
+    box-shadow: 0 2px 14px rgba(0,0,0,0.45);
   }
   #toast {
     position: absolute;
