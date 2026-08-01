@@ -55,6 +55,15 @@
     color: #eaf6ff;
     font-weight: 700;
   }
+  #testLink {
+    margin-top: 18px;
+    font-size: clamp(12px, 3vw, 16px);
+    color: #5aa9d6;
+    background: none;
+    border: none;
+    text-decoration: underline;
+  }
+  #testBox { display: flex; flex-direction: column; align-items: center; }
   .safe   { color: #6be36b; }
   .caution{ color: #ffd23f; }
   .danger { color: #ff5c5c; }
@@ -71,7 +80,10 @@
 <body>
 <div id="app">
   <div id="topbar"></div>
-  <button id="startBtn">GPS開始</button>
+  <div id="testBox">
+    <button id="startBtn">GPS開始</button>
+    <button id="testLink">🧪 現在地を使わずサンプル座標で表示を確認</button>
+  </div>
   <div id="depth" style="display:none">--</div>
   <div id="unit" style="display:none">m（海図水深・参考値）</div>
   <div id="status"></div>
@@ -195,13 +207,34 @@ function startWatching() {
 }
 
 startBtn.addEventListener('click', async () => {
-  startBtn.style.display = 'none';
+  document.getElementById('testBox').style.display = 'none';
   depthEl.style.display = 'block';
   unitEl.style.display = 'block';
   depthEl.textContent = '読込中…';
   await requestWakeLock();
   await loadGrid();
   startWatching();
+});
+
+const TEST_POINTS = [
+  { label: '浅瀬(危険域)', lat: 32.77784835417738, lon: 131.92830604230855 },
+  { label: '注意域', lat: 32.77044791014933, lon: 131.8974961831536 },
+  { label: '安全域', lat: 32.71170688567663, lon: 131.92555516202685 }
+];
+let testIndex = 0;
+const testLink = document.getElementById('testLink');
+testLink.addEventListener('click', async () => {
+  document.getElementById('testBox').style.display = 'none';
+  depthEl.style.display = 'block';
+  unitEl.style.display = 'block';
+  if (!grid) {
+    depthEl.textContent = '読込中…';
+    await loadGrid();
+  }
+  const p = TEST_POINTS[testIndex % TEST_POINTS.length];
+  testIndex++;
+  render(p.lat, p.lon, 8);
+  statusEl.textContent += `（テスト表示: ${p.label}）`;
 });
 
 if ('serviceWorker' in navigator) {
