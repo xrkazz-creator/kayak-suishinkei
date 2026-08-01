@@ -114,9 +114,6 @@ function lookupDepth(lat, lon) {
 
   const v0 = valueAt(row0, col0);
   if (v0 !== null && v0 < 0) return { depth: -v0, distCells: 0 };
-  if (v0 === null && row0 < 0 || row0 >= META.height || col0 < 0 || col0 >= META.width) {
-    // 完全に範囲外
-  }
 
   let best = null, bestDist = Infinity;
   const R = 6;
