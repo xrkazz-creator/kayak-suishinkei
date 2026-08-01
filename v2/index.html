@@ -20,8 +20,13 @@
   }
   #app {
     height: 100vh; height: 100dvh; width: 100vw;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
     position: relative;
+    overflow: hidden;
+  }
+  #numberView {
+    height: 100%; width: 100%;
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
   }
   #depth {
     font-size: clamp(80px, 55vmin, 640px);
@@ -36,15 +41,62 @@
     opacity: 0.7;
     margin-top: 0.1em;
   }
+  #mapView {
+    position: absolute; inset: 0;
+    display: none;
+  }
+  #mapCanvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    touch-action: none;
+  }
+  #mapDepthBadge {
+    position: absolute;
+    top: env(safe-area-inset-top, 10px);
+    left: 50%; transform: translateX(-50%);
+    background: rgba(3, 14, 24, 0.72);
+    border-radius: 18px;
+    padding: 6px 26px;
+    text-align: center;
+    line-height: 1.05;
+  }
+  #mapDepthNum {
+    font-size: clamp(40px, 16vmin, 160px);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  #mapDepthUnit {
+    display: block;
+    font-size: clamp(10px, 2.4vmin, 20px);
+    opacity: 0.75;
+  }
+  #mapControls {
+    position: absolute;
+    right: 10px;
+    bottom: calc(env(safe-area-inset-bottom, 10px) + 40px);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  #mapControls button {
+    width: clamp(40px, 10vmin, 56px);
+    height: clamp(40px, 10vmin, 56px);
+    border-radius: 50%;
+    border: 1px solid #2b90c9;
+    background: rgba(13, 52, 80, 0.85);
+    color: #eaf6ff;
+    font-size: clamp(16px, 4vmin, 22px);
+    font-weight: 700;
+  }
+  #recenterBtn { display: none; }
   #status {
     position: absolute;
     bottom: env(safe-area-inset-bottom, 10px);
     left: 0; right: 0;
     text-align: center;
     font-size: clamp(10px, 2.2vmin, 15px);
-    opacity: 0.55;
+    opacity: 0.65;
     padding: 4px 10px;
     line-height: 1.5;
+    text-shadow: 0 1px 3px #000;
   }
   #startBtn {
     font-size: clamp(20px, 5vw, 32px);
@@ -63,29 +115,55 @@
     border: none;
     text-decoration: underline;
   }
-  #testBox { display: flex; flex-direction: column; align-items: center; }
+  #testBox {
+    height: 100%; width: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
   .safe   { color: #6be36b; }
   .caution{ color: #ffd23f; }
   .danger { color: #ff5c5c; }
   .muted  { color: #7a8fa0; }
-  #topbar {
+  #modeToggleBtn {
     position: absolute;
     top: env(safe-area-inset-top, 8px);
-    right: 10px;
-    font-size: clamp(11px, 2.6vw, 15px);
-    opacity: 0.5;
+    left: 10px;
+    display: none;
+    font-size: clamp(12px, 3vmin, 16px);
+    padding: 0.5em 0.9em;
+    border-radius: 12px;
+    border: 1px solid #2b90c9;
+    background: rgba(13, 52, 80, 0.85);
+    color: #eaf6ff;
   }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="topbar"></div>
   <div id="testBox">
     <button id="startBtn">GPS開始</button>
     <button id="testLink">🧪 現在地を使わずサンプル座標で表示を確認</button>
   </div>
-  <div id="depth" style="display:none">--</div>
-  <div id="unit" style="display:none">m（海図水深・参考値）</div>
+
+  <div id="numberView">
+    <div id="depth">--</div>
+    <div id="unit">m（海図水深・参考値）</div>
+  </div>
+
+  <div id="mapView">
+    <canvas id="mapCanvas"></canvas>
+    <div id="mapDepthBadge">
+      <span id="mapDepthNum">--</span>
+      <span id="mapDepthUnit">m（海図水深・参考値）</span>
+    </div>
+    <div id="mapControls">
+      <button id="zoomInBtn">＋</button>
+      <button id="zoomOutBtn">－</button>
+      <button id="recenterBtn">🎯</button>
+      <button id="clearTrackBtn">🗑</button>
+    </div>
+  </div>
+
+  <button id="modeToggleBtn">🗺 地図</button>
   <div id="status"></div>
 </div>
 
@@ -100,8 +178,15 @@ const META = {
 const depthEl = document.getElementById('depth');
 const unitEl = document.getElementById('unit');
 const statusEl = document.getElementById('status');
-const topbarEl = document.getElementById('topbar');
 const startBtn = document.getElementById('startBtn');
+const testBox = document.getElementById('testBox');
+const numberView = document.getElementById('numberView');
+const mapView = document.getElementById('mapView');
+const mapCanvas = document.getElementById('mapCanvas');
+const mapDepthNum = document.getElementById('mapDepthNum');
+const mapDepthUnit = document.getElementById('mapDepthUnit');
+const modeToggleBtn = document.getElementById('modeToggleBtn');
+const recenterBtn = document.getElementById('recenterBtn');
 
 let grid = null;
 
@@ -118,12 +203,7 @@ function valueAt(row, col) {
 }
 
 // 陸判定(値>=0)のセルに当たった場合、周辺で最も近い水面下セルを探す(GPS誤差・海岸線ズレ対策)
-function lookupDepth(lat, lon) {
-  const colF = (lon - META.lon0) / META.dlon;
-  const rowF = (META.lat0 - lat) / META.dlat;
-  const col0 = Math.round(colF);
-  const row0 = Math.round(rowF);
-
+function lookupDepth(row0, col0) {
   const v0 = valueAt(row0, col0);
   if (v0 !== null && v0 < 0) return { depth: -v0, distCells: 0 };
 
@@ -150,30 +230,219 @@ function classify(depth) {
   return 'safe';
 }
 
-function render(lat, lon, accuracy) {
-  if (!grid) {
-    depthEl.textContent = '…';
-    depthEl.className = 'muted';
-    return;
-  }
-  const r = lookupDepth(lat, lon);
+function applyDepthResult(r) {
+  let text, cls, unitText;
   if (r.outOfRange) {
-    depthEl.textContent = '圏外';
-    depthEl.className = 'muted';
-    unitEl.textContent = 'データ対象エリア外です';
+    text = '圏外'; cls = 'muted'; unitText = 'データ対象エリア外です';
   } else if (r.onLand) {
-    depthEl.textContent = '陸上';
-    depthEl.className = 'muted';
-    unitEl.textContent = '陸地の座標を示しています';
+    text = '陸上'; cls = 'muted'; unitText = '陸地の座標を示しています';
   } else {
     const d = r.depth;
-    depthEl.textContent = d.toFixed(d < 10 ? 1 : 0);
-    depthEl.className = classify(d);
-    unitEl.textContent = 'm（海図水深・参考値／潮汐未補正）';
+    text = d.toFixed(d < 10 ? 1 : 0);
+    cls = classify(d);
+    unitText = 'm（海図水深・参考値／潮汐未補正）';
   }
+  depthEl.textContent = text; depthEl.className = cls; unitEl.textContent = unitText;
+  mapDepthNum.textContent = text; mapDepthNum.className = cls; mapDepthUnit.textContent = unitText;
+}
+
+// ---- 航跡・地図 ----
+const view = { row: META.height / 2, col: META.width / 2, cellsAcross: 60, autoFollow: true };
+const MIN_CELLS = 8, MAX_CELLS = Math.max(META.width, META.height);
+let currentRowCol = null;
+let bgCanvas = null;
+let track = [];
+try { track = JSON.parse(localStorage.getItem('kayak_track') || '[]'); } catch (e) { track = []; }
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function buildBackground() {
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = META.width; bgCanvas.height = META.height;
+  const ctx = bgCanvas.getContext('2d');
+  const img = ctx.createImageData(META.width, META.height);
+  const data = img.data;
+  for (let i = 0; i < META.width * META.height; i++) {
+    const raw = grid[i];
+    let r, g, b;
+    if (raw === META.nodata) {
+      r = 60; g = 66; b = 72;
+    } else {
+      const meters = raw * META.scale;
+      if (meters >= 0) {
+        const t = Math.min(meters / 300, 1);
+        r = lerp(210, 120, t); g = lerp(190, 150, t); b = lerp(150, 90, t);
+      } else {
+        const t = Math.min(-meters / 80, 1);
+        r = lerp(180, 4, t); g = lerp(230, 40, t); b = lerp(255, 80, t);
+      }
+    }
+    const o = i * 4;
+    data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+let saveTrackTimer = null;
+function saveTrackThrottled() {
+  clearTimeout(saveTrackTimer);
+  saveTrackTimer = setTimeout(() => {
+    try { localStorage.setItem('kayak_track', JSON.stringify(track.slice(-3000))); } catch (e) { /* storage full: skip */ }
+  }, 2000);
+}
+
+function pushTrack(row, col) {
+  const last = track[track.length - 1];
+  if (!last || Math.hypot(row - last[0], col - last[1]) > 0.5) {
+    track.push([row, col]);
+    saveTrackThrottled();
+  }
+}
+
+function clampView() {
+  view.cellsAcross = Math.min(Math.max(view.cellsAcross, MIN_CELLS), MAX_CELLS);
+}
+
+function drawMap() {
+  if (!bgCanvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = mapCanvas.clientWidth, ch = mapCanvas.clientHeight;
+  if (cw === 0 || ch === 0) return;
+  if (mapCanvas.width !== Math.round(cw * dpr) || mapCanvas.height !== Math.round(ch * dpr)) {
+    mapCanvas.width = Math.round(cw * dpr);
+    mapCanvas.height = Math.round(ch * dpr);
+  }
+  const ctx = mapCanvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+
+  clampView();
+  let srcW = view.cellsAcross;
+  let srcH = srcW * (ch / cw);
+  if (srcH > META.height) { srcH = META.height; srcW = srcH * (cw / ch); }
+  if (srcW > META.width) { srcW = META.width; srcH = srcW * (ch / cw); }
+  const srcX = Math.min(Math.max(view.col - srcW / 2, 0), META.width - srcW);
+  const srcY = Math.min(Math.max(view.row - srcH / 2, 0), META.height - srcH);
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(bgCanvas, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
+
+  const toScreen = (r, c) => ({ x: (c - srcX) / srcW * cw, y: (r - srcY) / srcH * ch });
+
+  if (track.length > 1) {
+    ctx.strokeStyle = '#ffcf3f';
+    ctx.lineWidth = Math.max(2, cw * 0.006);
+    ctx.beginPath();
+    track.forEach(([r, c], idx) => {
+      const p = toScreen(r, c);
+      if (idx === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+  }
+
+  if (currentRowCol) {
+    const p = toScreen(currentRowCol[0], currentRowCol[1]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(6, cw * 0.018), 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#ff3b3b';
+    ctx.stroke();
+  }
+
+  recenterBtn.style.display = view.autoFollow ? 'none' : 'block';
+}
+
+window.addEventListener('resize', () => { if (currentMode === 'map') drawMap(); });
+
+// ---- パン・ピンチ操作 ----
+const pointers = new Map();
+let panStart = null;
+let pinchStartDist = null;
+let pinchStartCells = null;
+
+mapCanvas.addEventListener('pointerdown', (e) => {
+  mapCanvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) {
+    view.autoFollow = false;
+    panStart = { x: e.clientX, y: e.clientY, row: view.row, col: view.col };
+  } else if (pointers.size === 2) {
+    const pts = [...pointers.values()];
+    pinchStartDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    pinchStartCells = view.cellsAcross;
+  }
+});
+mapCanvas.addEventListener('pointermove', (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const cw = mapCanvas.clientWidth || 1;
+  if (pointers.size === 1 && panStart) {
+    const dx = e.clientX - panStart.x, dy = e.clientY - panStart.y;
+    const cellsPerPx = view.cellsAcross / cw;
+    view.col = panStart.col - dx * cellsPerPx;
+    view.row = panStart.row - dy * cellsPerPx;
+    drawMap();
+  } else if (pointers.size === 2 && pinchStartDist) {
+    const pts = [...pointers.values()];
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    view.cellsAcross = pinchStartCells * (pinchStartDist / dist);
+    drawMap();
+  }
+});
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchStartDist = null;
+  if (pointers.size < 1) panStart = null;
+}
+mapCanvas.addEventListener('pointerup', endPointer);
+mapCanvas.addEventListener('pointercancel', endPointer);
+mapCanvas.addEventListener('pointerleave', endPointer);
+
+document.getElementById('zoomInBtn').addEventListener('click', () => { view.cellsAcross /= 1.4; drawMap(); });
+document.getElementById('zoomOutBtn').addEventListener('click', () => { view.cellsAcross *= 1.4; drawMap(); });
+recenterBtn.addEventListener('click', () => {
+  view.autoFollow = true;
+  if (currentRowCol) { view.row = currentRowCol[0]; view.col = currentRowCol[1]; }
+  drawMap();
+});
+document.getElementById('clearTrackBtn').addEventListener('click', () => {
+  track = [];
+  try { localStorage.removeItem('kayak_track'); } catch (e) {}
+  drawMap();
+});
+
+// ---- 表示モード切替 ----
+let currentMode = localStorage.getItem('kayak_view_mode') || 'number';
+function applyMode() {
+  numberView.style.display = currentMode === 'number' ? 'flex' : 'none';
+  mapView.style.display = currentMode === 'map' ? 'block' : 'none';
+  modeToggleBtn.textContent = currentMode === 'number' ? '🗺 地図' : '🔢 数字';
+  if (currentMode === 'map') requestAnimationFrame(drawMap);
+}
+modeToggleBtn.addEventListener('click', () => {
+  currentMode = currentMode === 'number' ? 'map' : 'number';
+  try { localStorage.setItem('kayak_view_mode', currentMode); } catch (e) {}
+  applyMode();
+});
+
+function render(lat, lon, accuracy) {
+  if (!grid) return;
+  const col = (lon - META.lon0) / META.dlon;
+  const row = (META.lat0 - lat) / META.dlat;
+  currentRowCol = [row, col];
+  pushTrack(row, col);
+  if (view.autoFollow) { view.row = row; view.col = col; }
+
+  const r = lookupDepth(Math.round(row), Math.round(col));
+  applyDepthResult(r);
+
   const acc = accuracy ? Math.round(accuracy) : '--';
   const t = new Date().toLocaleTimeString('ja-JP', { hour12: false });
   statusEl.textContent = `GPS精度 ±${acc}m ・ 更新 ${t}`;
+
+  if (currentMode === 'map') drawMap();
 }
 
 let wakeLock = null;
@@ -185,7 +454,7 @@ async function requestWakeLock() {
   } catch (e) { /* ignore, not fatal */ }
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && startBtn.style.display === 'none') {
+  if (document.visibilityState === 'visible' && testBox.style.display === 'none') {
     requestWakeLock();
   }
 });
@@ -196,23 +465,26 @@ function startWatching() {
     return;
   }
   navigator.geolocation.watchPosition(
-    (pos) => {
-      render(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
-    },
-    (err) => {
-      statusEl.textContent = 'GPS取得エラー: ' + err.message;
-    },
+    (pos) => { render(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); },
+    (err) => { statusEl.textContent = 'GPS取得エラー: ' + err.message; },
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
   );
 }
 
+async function enterMainView() {
+  testBox.style.display = 'none';
+  modeToggleBtn.style.display = 'block';
+  applyMode();
+  if (!grid) {
+    depthEl.textContent = '読込中…';
+    await loadGrid();
+    buildBackground();
+  }
+}
+
 startBtn.addEventListener('click', async () => {
-  document.getElementById('testBox').style.display = 'none';
-  depthEl.style.display = 'block';
-  unitEl.style.display = 'block';
-  depthEl.textContent = '読込中…';
+  await enterMainView();
   await requestWakeLock();
-  await loadGrid();
   startWatching();
 });
 
@@ -222,19 +494,12 @@ const TEST_POINTS = [
   { label: '安全域', lat: 32.71170688567663, lon: 131.92555516202685 }
 ];
 let testIndex = 0;
-const testLink = document.getElementById('testLink');
-testLink.addEventListener('click', async () => {
-  document.getElementById('testBox').style.display = 'none';
-  depthEl.style.display = 'block';
-  unitEl.style.display = 'block';
-  if (!grid) {
-    depthEl.textContent = '読込中…';
-    await loadGrid();
-  }
+document.getElementById('testLink').addEventListener('click', async () => {
+  await enterMainView();
   const p = TEST_POINTS[testIndex % TEST_POINTS.length];
   testIndex++;
   render(p.lat, p.lon, 8);
-  statusEl.textContent += `（テスト表示: ${p.label}）`;
+  statusEl.textContent += `(テスト表示: ${p.label})`;
 });
 
 if ('serviceWorker' in navigator) {
