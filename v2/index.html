@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>カヤック水深計</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#071421">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: #071421; color: #eaf6ff;
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    overscroll-behavior: none; user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  #app {
+    height: 100vh; height: 100dvh; width: 100vw;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: relative;
+  }
+  #depth {
+    font-size: clamp(60px, 32vw, 420px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.3s ease;
+  }
+  #unit {
+    font-size: clamp(16px, 4vw, 36px);
+    opacity: 0.75;
+    margin-top: 0.2em;
+  }
+  #status {
+    position: absolute;
+    bottom: env(safe-area-inset-bottom, 10px);
+    left: 0; right: 0;
+    text-align: center;
+    font-size: clamp(10px, 2.6vw, 15px);
+    opacity: 0.55;
+    padding: 4px 10px;
+    line-height: 1.5;
+  }
+  #startBtn {
+    font-size: clamp(20px, 5vw, 32px);
+    padding: 0.9em 1.6em;
+    border-radius: 16px;
+    border: 2px solid #2b90c9;
+    background: #0d3450;
+    color: #eaf6ff;
+    font-weight: 700;
+  }
+  #testLink {
+    margin-top: 18px;
+    font-size: clamp(12px, 3vw, 16px);
+    color: #5aa9d6;
+    background: none;
+    border: none;
+    text-decoration: underline;
+  }
+  #testBox { display: flex; flex-direction: column; align-items: center; }
+  .safe   { color: #6be36b; }
+  .caution{ color: #ffd23f; }
+  .danger { color: #ff5c5c; }
+  .muted  { color: #7a8fa0; }
+  #topbar {
+    position: absolute;
+    top: env(safe-area-inset-top, 8px);
+    right: 10px;
+    font-size: clamp(11px, 2.6vw, 15px);
+    opacity: 0.5;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar"></div>
+  <div id="testBox">
+    <button id="startBtn">GPS開始</button>
+    <button id="testLink">🧪 現在地を使わずサンプル座標で表示を確認</button>
+  </div>
+  <div id="depth" style="display:none">--</div>
+  <div id="unit" style="display:none">m（海図水深・参考値）</div>
+  <div id="status"></div>
+</div>
+
+<script>
+const META = {
+  width: 640, height: 869,
+  lon0: 131.6988826268156, lat0: 32.95083373333321,
+  dlon: 0.0005501760563380282, dlat: 0.0004625277517535553,
+  scale: 0.1, nodata: -32768
+};
+
+const depthEl = document.getElementById('depth');
+const unitEl = document.getElementById('unit');
+const statusEl = document.getElementById('status');
+const topbarEl = document.getElementById('topbar');
+const startBtn = document.getElementById('startBtn');
+
+let grid = null;
+
+async function loadGrid() {
+  const res = await fetch('depth_data.bin');
+  const buf = await res.arrayBuffer();
+  grid = new Int16Array(buf);
+}
+
+function valueAt(row, col) {
+  if (row < 0 || row >= META.height || col < 0 || col >= META.width) return null;
+  const v = grid[row * META.width + col];
+  return v === META.nodata ? null : v * META.scale;
+}
+
+// 陸判定(値>=0)のセルに当たった場合、周辺で最も近い水面下セルを探す(GPS誤差・海岸線ズレ対策)
+function lookupDepth(lat, lon) {
+  const colF = (lon - META.lon0) / META.dlon;
+  const rowF = (META.lat0 - lat) / META.dlat;
+  const col0 = Math.round(colF);
+  const row0 = Math.round(rowF);
+
+  const v0 = valueAt(row0, col0);
+  if (v0 !== null && v0 < 0) return { depth: -v0, distCells: 0 };
+
+  let best = null, bestDist = Infinity;
+  const R = 6;
+  for (let dr = -R; dr <= R; dr++) {
+    for (let dc = -R; dc <= R; dc++) {
+      const v = valueAt(row0 + dr, col0 + dc);
+      if (v !== null && v < 0) {
+        const dist = dr * dr + dc * dc;
+        if (dist < bestDist) { bestDist = dist; best = v; }
+      }
+    }
+  }
+  if (best !== null) return { depth: -best, distCells: Math.sqrt(bestDist) };
+
+  if (v0 === null) return { outOfRange: true };
+  return { onLand: true };
+}
+
+function classify(depth) {
+  if (depth < 1.5) return 'danger';
+  if (depth < 4) return 'caution';
+  return 'safe';
+}
+
+function render(lat, lon, accuracy) {
+  if (!grid) {
+    depthEl.textContent = '…';
+    depthEl.className = 'muted';
+    return;
+  }
+  const r = lookupDepth(lat, lon);
+  if (r.outOfRange) {
+    depthEl.textContent = '圏外';
+    depthEl.className = 'muted';
+    unitEl.textContent = 'データ対象エリア外です';
+  } else if (r.onLand) {
+    depthEl.textContent = '陸上';
+    depthEl.className = 'muted';
+    unitEl.textContent = '陸地の座標を示しています';
+  } else {
+    const d = r.depth;
+    depthEl.textContent = d.toFixed(d < 10 ? 1 : 0);
+    depthEl.className = classify(d);
+    unitEl.textContent = 'm（海図水深・参考値／潮汐未補正）';
+  }
+  const acc = accuracy ? Math.round(accuracy) : '--';
+  const t = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+  statusEl.textContent = `GPS精度 ±${acc}m ・ 更新 ${t}`;
+}
+
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (e) { /* ignore, not fatal */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && startBtn.style.display === 'none') {
+    requestWakeLock();
+  }
+});
+
+function startWatching() {
+  if (!('geolocation' in navigator)) {
+    statusEl.textContent = 'この端末はGPSに対応していません';
+    return;
+  }
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      render(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+    },
+    (err) => {
+      statusEl.textContent = 'GPS取得エラー: ' + err.message;
+    },
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+  );
+}
+
+startBtn.addEventListener('click', async () => {
+  document.getElementById('testBox').style.display = 'none';
+  depthEl.style.display = 'block';
+  unitEl.style.display = 'block';
+  depthEl.textContent = '読込中…';
+  await requestWakeLock();
+  await loadGrid();
+  startWatching();
+});
+
+const TEST_POINTS = [
+  { label: '浅瀬(危険域)', lat: 32.77784835417738, lon: 131.92830604230855 },
+  { label: '注意域', lat: 32.77044791014933, lon: 131.8974961831536 },
+  { label: '安全域', lat: 32.71170688567663, lon: 131.92555516202685 }
+];
+let testIndex = 0;
+const testLink = document.getElementById('testLink');
+testLink.addEventListener('click', async () => {
+  document.getElementById('testBox').style.display = 'none';
+  depthEl.style.display = 'block';
+  unitEl.style.display = 'block';
+  if (!grid) {
+    depthEl.textContent = '読込中…';
+    await loadGrid();
+  }
+  const p = TEST_POINTS[testIndex % TEST_POINTS.length];
+  testIndex++;
+  render(p.lat, p.lon, 8);
+  statusEl.textContent += `（テスト表示: ${p.label}）`;
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

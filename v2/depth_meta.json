@@ -1,0 +1,11 @@
+{
+  "width": 640,
+  "height": 869,
+  "lon0": 131.6988826268156,
+  "lat0": 32.95083373333321,
+  "dlon": 0.0005501760563380282,
+  "dlat": 0.0004625277517535553,
+  "scale": 0.1,
+  "nodata": -32768,
+  "note": "positive=land elevation(m), negative=depth below sea level(m), source: GMRT (gmrt.org)"
+}
