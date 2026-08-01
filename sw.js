@@ -1,4 +1,4 @@
-const CACHE = 'kayak-depth-v10';
+const CACHE = 'kayak-depth-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -28,9 +28,12 @@ self.addEventListener('fetch', (event) => {
     event.request.url.endsWith('/') || event.request.url.endsWith('index.html');
 
   if (isHtml) {
-    // 本体HTMLはネット優先。海上で圏外の時だけキャッシュにフォールバック
+    // 本体HTMLはネット優先。海上で圏外の時だけキャッシュにフォールバック。
+    // GitHub PagesがCache-Control: max-age=600を返すため、既定のfetchだと
+    // ブラウザのHTTPキャッシュ経由で10分間古い内容が返ることがある。
+    // no-storeで明示的にネットワークから取り直す。
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then((res) => {
           caches.open(CACHE).then((cache) => cache.put(event.request, res.clone()));
           return res;
