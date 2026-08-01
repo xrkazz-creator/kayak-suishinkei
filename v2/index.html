@@ -487,7 +487,11 @@ document.getElementById('zoomInBtn').addEventListener('click', () => { view.cell
 document.getElementById('zoomOutBtn').addEventListener('click', () => { view.cellsAcross *= 1.4; drawMap(); });
 recenterBtn.addEventListener('click', () => {
   view.autoFollow = true;
-  if (currentRowCol) { view.row = currentRowCol[0]; view.col = currentRowCol[1]; }
+  if (currentRowCol) {
+    const [row, col] = currentRowCol;
+    const withinGrid = row >= 0 && row <= META.height && col >= 0 && col <= META.width;
+    if (withinGrid) { view.row = row; view.col = col; }
+  }
   drawMap();
 });
 document.getElementById('clearTrackBtn').addEventListener('click', () => {
