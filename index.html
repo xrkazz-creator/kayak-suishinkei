@@ -26,10 +26,15 @@
   #numberView {
     height: 100%; width: 100%;
     display: none;
-    flex-direction: column; align-items: center; justify-content: center;
+    flex-direction: row; align-items: center; justify-content: center;
+    gap: 3vw;
+  }
+  #depthCol {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 0;
   }
   #depth {
-    font-size: clamp(80px, 55vmin, 640px);
+    font-size: clamp(70px, min(50vmin, 68vw), 600px);
     font-weight: 800;
     line-height: 1;
     letter-spacing: -0.02em;
@@ -37,9 +42,10 @@
     transition: color 0.3s ease;
   }
   #unit {
-    font-size: clamp(12px, 3vmin, 28px);
+    font-size: clamp(11px, min(2.6vmin, 3.6vw), 26px);
     opacity: 0.7;
     margin-top: 0.1em;
+    text-align: center;
   }
   #mapView {
     position: absolute; inset: 0;
@@ -94,16 +100,15 @@
     border-width: 2px !important;
   }
   #addPointBtnBig {
-    position: absolute;
-    right: max(16px, env(safe-area-inset-right, 16px));
-    top: calc(env(safe-area-inset-top, 16px) + 16px);
-    width: clamp(130px, 34vmin, 190px);
-    height: clamp(130px, 34vmin, 190px);
-    border-radius: 50%;
+    flex-shrink: 0;
+    width: clamp(80px, 22vmin, 140px);
+    height: clamp(90px, 26vmin, 160px);
+    border-radius: 20px;
     border: 3px solid #2b90c9;
     background: rgba(13, 52, 80, 0.9);
     color: #eaf6ff;
-    font-size: clamp(52px, 14vmin, 76px);
+    font-size: clamp(18px, 5vmin, 28px);
+    font-weight: 700;
     box-shadow: 0 2px 14px rgba(0,0,0,0.45);
   }
   #toast {
@@ -205,9 +210,11 @@
   </div>
 
   <div id="numberView">
-    <div id="depth">--</div>
-    <div id="unit">m（海図水深・参考値）</div>
-    <button id="addPointBtnBig">📍</button>
+    <div id="depthCol">
+      <div id="depth">--</div>
+      <div id="unit">m（海図水深・参考値）</div>
+    </div>
+    <button id="addPointBtnBig">登録</button>
   </div>
   <div id="toast"></div>
 
