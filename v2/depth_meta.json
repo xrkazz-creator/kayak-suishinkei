@@ -7,5 +7,5 @@
   "dlat": 0.0004625277517535553,
   "scale": 0.1,
   "nodata": -32768,
-  "note": "positive=land elevation(m), negative=depth below sea level(m), source: GMRT (gmrt.org)"
+  "note": "land/sea boundary corrected with OSM coastline; positive=land elevation(m) [approx], negative=depth below sea level(m) [GMRT, approx], source: GMRT (gmrt.org) + OpenStreetMap coastline (ODbL)"
 }
