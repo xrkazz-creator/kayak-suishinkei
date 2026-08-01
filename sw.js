@@ -1,4 +1,4 @@
-const CACHE = 'kayak-depth-v1';
+const CACHE = 'kayak-depth-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,23 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const isHtml = event.request.mode === 'navigate' ||
+    event.request.url.endsWith('/') || event.request.url.endsWith('index.html');
+
+  if (isHtml) {
+    // 本体HTMLはネット優先。海上で圏外の時だけキャッシュにフォールバック
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          caches.open(CACHE).then((cache) => cache.put(event.request, res.clone()));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // データ・画像類は変化しないのでキャッシュ優先
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
