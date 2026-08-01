@@ -118,6 +118,20 @@
   #testBox {
     height: 100%; width: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px; box-sizing: border-box;
+  }
+  #appTitle {
+    font-size: clamp(20px, 6vw, 30px);
+    margin: 0 0 14px;
+  }
+  #featureList {
+    text-align: left;
+    max-width: 420px;
+    font-size: clamp(12px, 3.4vw, 16px);
+    line-height: 1.7;
+    opacity: 0.85;
+    margin: 0 0 22px;
+    padding-left: 1.2em;
   }
   .safe   { color: #6be36b; }
   .caution{ color: #ffd23f; }
@@ -140,6 +154,16 @@
 <body>
 <div id="app">
   <div id="testBox">
+    <h1 id="appTitle">カヤック水深計</h1>
+    <ul id="featureList">
+      <li>現在地の水深を画面いっぱいの大きな数字で表示</li>
+      <li>1.5m未満は赤、4m未満は黄、それ以上は緑で危険度を色分け</li>
+      <li>地図表示に切替可能(🗺ボタン)。等深線(5〜100m)・海岸線・地名入り</li>
+      <li>現在地マーカー、ピンチズーム/ドラッグで地図を操作可能</li>
+      <li>航跡を自動記録(🗑で消去)、ポイント登録📍(タップで削除)</li>
+      <li>対象エリア: 大分県佐伯市 波当津海岸周辺</li>
+      <li>一度読み込めば電波の届かない沖合でもオフラインで動作</li>
+    </ul>
     <button id="startBtn">GPS開始</button>
     <button id="testLink">🧪 現在地を使わずサンプル座標で表示を確認</button>
   </div>
