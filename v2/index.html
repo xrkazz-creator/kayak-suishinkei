@@ -451,18 +451,30 @@ function drawMap() {
       const rmin = Math.min(...pts.map(p => p[0])), rmax = Math.max(...pts.map(p => p[0]));
       const cmin = Math.min(...pts.map(p => p[1])), cmax = Math.max(...pts.map(p => p[1]));
       if (rmax < srcY || rmin > srcY + srcH || cmax < srcX || cmin > srcX + srcW) continue;
+      const screenPts = pts.map(([r, c]) => toScreen(r, c));
       ctx.beginPath();
-      pts.forEach(([r, c], idx) => {
-        const p = toScreen(r, c);
-        if (idx === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-      });
+      screenPts.forEach((p, idx) => { if (idx === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
       ctx.stroke();
       if (isIndex) {
-        const p0 = toScreen(pts[0][0], pts[0][1]);
-        if (p0.x >= -20 && p0.x <= cw + 20 && p0.y >= -20 && p0.y <= ch + 20) {
-          ctx.font = `${Math.max(10, cw * 0.028)}px sans-serif`;
-          ctx.fillStyle = 'rgba(255,255,255,0.9)';
-          ctx.fillText(lvl.depthM + 'm', p0.x + 2, p0.y - 2);
+        // 線の長さに沿って一定間隔ごとにラベルを繰り返し表示(実際の海図と同様、
+        // どこを見ていても近くに数字がある状態にする)
+        ctx.font = `${Math.max(10, cw * 0.028)}px sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        const spacing = Math.max(110, cw * 0.32);
+        let acc = 0;
+        let nextAt = spacing * 0.4;
+        for (let i = 1; i < screenPts.length; i++) {
+          const a = screenPts[i - 1], b = screenPts[i];
+          const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+          while (segLen > 0 && acc + segLen >= nextAt) {
+            const t = (nextAt - acc) / segLen;
+            const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
+            if (x >= -20 && x <= cw + 20 && y >= -20 && y <= ch + 20) {
+              ctx.fillText(lvl.depthM + 'm', x + 2, y - 2);
+            }
+            nextAt += spacing;
+          }
+          acc += segLen;
         }
       }
     }

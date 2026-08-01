@@ -1,4 +1,4 @@
-const CACHE = 'kayak-depth-v7';
+const CACHE = 'kayak-depth-v8';
 const ASSETS = [
   './',
   './index.html',
