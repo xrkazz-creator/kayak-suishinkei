@@ -248,7 +248,10 @@ function applyDepthResult(r) {
 
 // ---- 航跡・地図 ----
 const view = { row: META.height / 2, col: META.width / 2, cellsAcross: 60, autoFollow: true };
-const MIN_CELLS = 8, MAX_CELLS = Math.max(META.width, META.height);
+// ズームアウト上限は画面アスペクト比が偏っても縦横どちらの軸も
+// グリッド全体幅/高さに達しないよう十分小さい値にする(端に貼り付いて
+// 中心がずれる問題を避けるため)。200セル≒10〜11km四方で十分実用範囲。
+const MIN_CELLS = 8, MAX_CELLS = 200;
 let currentRowCol = null;
 let bgCanvas = null;
 let track = [];
