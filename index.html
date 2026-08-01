@@ -189,11 +189,40 @@ const modeToggleBtn = document.getElementById('modeToggleBtn');
 const recenterBtn = document.getElementById('recenterBtn');
 
 let grid = null;
+let contourLevels = [];
 
 async function loadGrid() {
   const res = await fetch('depth_data.bin');
   const buf = await res.arrayBuffer();
   grid = new Int16Array(buf);
+}
+
+async function loadContours() {
+  try {
+    const res = await fetch('contours.bin');
+    const buf = await res.arrayBuffer();
+    const dv = new DataView(buf);
+    let offset = 0;
+    const numLevels = dv.getUint16(offset, true); offset += 2;
+    const levels = [];
+    for (let li = 0; li < numLevels; li++) {
+      const depthM = dv.getFloat32(offset, true); offset += 4;
+      const numPolylines = dv.getUint32(offset, true); offset += 4;
+      const polylines = [];
+      for (let pi = 0; pi < numPolylines; pi++) {
+        const n = dv.getUint32(offset, true); offset += 4;
+        const pts = new Array(n);
+        for (let i = 0; i < n; i++) {
+          const row = dv.getFloat32(offset, true); offset += 4;
+          const col = dv.getFloat32(offset, true); offset += 4;
+          pts[i] = [row, col];
+        }
+        polylines.push(pts);
+      }
+      levels.push({ depthM, polylines });
+    }
+    contourLevels = levels;
+  } catch (e) { contourLevels = []; }
 }
 
 function valueAt(row, col) {
@@ -331,6 +360,32 @@ function drawMap() {
   ctx.drawImage(bgCanvas, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
 
   const toScreen = (r, c) => ({ x: (c - srcX) / srcW * cw, y: (r - srcY) / srcH * ch });
+
+  const LABEL_DEPTHS = new Set([5, 10, 20, 30, 50, 70]);
+  for (const lvl of contourLevels) {
+    const isIndex = LABEL_DEPTHS.has(lvl.depthM);
+    ctx.strokeStyle = isIndex ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = isIndex ? 1.3 : 0.7;
+    for (const pts of lvl.polylines) {
+      const rmin = Math.min(...pts.map(p => p[0])), rmax = Math.max(...pts.map(p => p[0]));
+      const cmin = Math.min(...pts.map(p => p[1])), cmax = Math.max(...pts.map(p => p[1]));
+      if (rmax < srcY || rmin > srcY + srcH || cmax < srcX || cmin > srcX + srcW) continue;
+      ctx.beginPath();
+      pts.forEach(([r, c], idx) => {
+        const p = toScreen(r, c);
+        if (idx === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+      if (isIndex) {
+        const p0 = toScreen(pts[0][0], pts[0][1]);
+        if (p0.x >= -20 && p0.x <= cw + 20 && p0.y >= -20 && p0.y <= ch + 20) {
+          ctx.font = `${Math.max(10, cw * 0.028)}px sans-serif`;
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.fillText(lvl.depthM + 'm', p0.x + 2, p0.y - 2);
+        }
+      }
+    }
+  }
 
   if (track.length > 1) {
     ctx.strokeStyle = '#ffcf3f';
@@ -482,6 +537,7 @@ async function enterMainView() {
     depthEl.textContent = '読込中…';
     await loadGrid();
     buildBackground();
+    loadContours();
   }
 }
 

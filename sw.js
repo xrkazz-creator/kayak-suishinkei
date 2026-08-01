@@ -1,9 +1,10 @@
-const CACHE = 'kayak-depth-v2';
+const CACHE = 'kayak-depth-v3';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './depth_data.bin',
+  './contours.bin',
   './icon-192.png',
   './icon-512.png'
 ];
