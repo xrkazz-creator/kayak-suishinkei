@@ -515,8 +515,15 @@ function render(lat, lon, accuracy) {
   const col = (lon - META.lon0) / META.dlon;
   const row = (META.lat0 - lat) / META.dlat;
   currentRowCol = [row, col];
-  pushTrack(row, col);
-  if (view.autoFollow) { view.row = row; view.col = col; }
+
+  // 対象エリアから極端に離れた座標(圏外テスト等)を航跡や地図中心に
+  // そのまま使うと、パン操作で戻せないほど地図がズレてしまうため、
+  // グリッド範囲内に収まっている場合のみ航跡追加・自動追従を行う。
+  const withinGrid = row >= 0 && row <= META.height && col >= 0 && col <= META.width;
+  if (withinGrid) {
+    pushTrack(row, col);
+    if (view.autoFollow) { view.row = row; view.col = col; }
+  }
 
   const r = lookupDepth(Math.round(row), Math.round(col));
   applyDepthResult(r);
