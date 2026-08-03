@@ -190,10 +190,24 @@
     background: rgba(13, 52, 80, 0.85);
     color: #eaf6ff;
   }
+  #gpsWarning {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: none;
+    z-index: 30;
+    text-align: center;
+    background: #b3261e;
+    color: #fff;
+    font-weight: 700;
+    font-size: clamp(12px, 3.2vmin, 17px);
+    padding: calc(env(safe-area-inset-top, 0px) + 6px) 10px 6px;
+  }
+  #gpsWarning.show { display: block; }
 </style>
 </head>
 <body>
 <div id="app">
+  <div id="gpsWarning">⚠ GPS更新が止まっています(表示は古い可能性があります)</div>
   <div id="testBox">
     <h1 id="appTitle">カヤック水深計</h1>
     <ul id="featureList">
@@ -679,8 +693,14 @@ modeToggleBtn.addEventListener('click', () => {
   applyMode();
 });
 
+let lastFixTime = null;
+const gpsWarningEl = document.getElementById('gpsWarning');
+
 function render(lat, lon, accuracy) {
   if (!grid) return;
+  lastFixTime = Date.now();
+  gpsWarningEl.classList.remove('show');
+
   const col = (lon - META.lon0) / META.dlon;
   const row = (META.lat0 - lat) / META.dlat;
   currentRowCol = [row, col];
@@ -704,6 +724,15 @@ function render(lat, lon, accuracy) {
   if (currentMode === 'map') drawMap();
 }
 
+const STALE_MS = 20000;
+let gpsWatchStarted = false;
+setInterval(() => {
+  if (!gpsWatchStarted) return;
+  if (lastFixTime === null || Date.now() - lastFixTime > STALE_MS) {
+    gpsWarningEl.classList.add('show');
+  }
+}, 4000);
+
 let wakeLock = null;
 async function requestWakeLock() {
   try {
@@ -723,11 +752,24 @@ function startWatching() {
     statusEl.textContent = 'この端末はGPSに対応していません';
     return;
   }
-  navigator.geolocation.watchPosition(
-    (pos) => { render(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); },
-    (err) => { statusEl.textContent = 'GPS取得エラー: ' + err.message; },
-    { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
-  );
+  gpsWatchStarted = true;
+  const onFix = (pos) => render(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+  const onError = (err) => {
+    statusEl.textContent = 'GPS取得エラー: ' + err.message;
+    gpsWarningEl.classList.add('show');
+  };
+
+  // watchPositionは電波状況が悪いと更新が止まる/古い位置を返し続けることが
+  // あるため、maximumAge:0で必ず新しい値を要求しつつ、念のため
+  // getCurrentPositionによる定期的な強制再取得も並行して行う。
+  navigator.geolocation.watchPosition(onFix, onError, {
+    enableHighAccuracy: true, maximumAge: 0, timeout: 15000
+  });
+  setInterval(() => {
+    navigator.geolocation.getCurrentPosition(onFix, () => {}, {
+      enableHighAccuracy: true, maximumAge: 0, timeout: 8000
+    });
+  }, 8000);
 }
 
 async function enterMainView() {
